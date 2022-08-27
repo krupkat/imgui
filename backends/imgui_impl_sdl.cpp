@@ -278,6 +278,18 @@ bool ImGui_ImplSDL2_ProcessEvent(const SDL_Event* event)
                 SDL_GetWindowPosition(SDL_GetWindowFromID(event->motion.windowID), &window_x, &window_y);
                 mouse_pos.x += window_x;
                 mouse_pos.y += window_y;
+            } else {
+#if defined(__APPLE__)
+                // Fix for high DPI mac
+                ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+                int display_id = SDL_GetWindowDisplayIndex(SDL_GetWindowFromID(event->motion.windowID));
+                if (!platform_io.Monitors.empty() && platform_io.Monitors[display_id].DpiScale > 1.0f)
+                {
+                    // The Framebuffer is scaled by an integer ceiling of the actual ratio, so 2.0 not 1.685 on Mac!
+                    mouse_pos.x *= roundf(platform_io.Monitors[display_id].DpiScale);
+                    mouse_pos.y *= roundf(platform_io.Monitors[display_id].DpiScale);
+                }
+#endif
             }
             io.AddMousePosEvent(mouse_pos.x, mouse_pos.y);
             return true;
@@ -534,6 +546,17 @@ static void ImGui_ImplSDL2_UpdateMouseData()
                 SDL_GetWindowPosition(focused_window, &window_x, &window_y);
                 mouse_x -= window_x;
                 mouse_y -= window_y;
+#if defined(__APPLE__)
+                // Fix for high DPI mac
+                ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+                int display_id = SDL_GetWindowDisplayIndex(focused_window);
+                if (!platform_io.Monitors.empty() && platform_io.Monitors[display_id].DpiScale > 1.0f)
+                {
+                    // The Framebuffer is scaled by an integer ceiling of the actual ratio, so 2.0 not 1.685 on Mac!
+                    mouse_x *= roundf(platform_io.Monitors[display_id].DpiScale);
+                    mouse_y *= roundf(platform_io.Monitors[display_id].DpiScale);
+                }
+#endif
             }
             io.AddMousePosEvent((float)mouse_x, (float)mouse_y);
         }
@@ -672,6 +695,16 @@ void ImGui_ImplSDL2_NewFrame()
     io.DisplaySize = ImVec2((float)w, (float)h);
     if (w > 0 && h > 0)
         io.DisplayFramebufferScale = ImVec2((float)display_w / w, (float)display_h / h);
+
+#if defined(__APPLE__)
+    // On Apple, The window size is reported in Low DPI, even when running in high DPI mode
+    ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+    if (!platform_io.Monitors.empty() && platform_io.Monitors[0].DpiScale > 1.0f && display_h != h)
+    {
+        io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+        io.DisplaySize = ImVec2((float)display_w, (float)display_h);
+    }
+#endif
 
     // Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
     static Uint64 frequency = SDL_GetPerformanceFrequency();
